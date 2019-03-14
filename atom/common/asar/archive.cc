@@ -23,6 +23,21 @@
 #include <io.h>
 #endif
 
+// XUESHU-WEB
+#include "AES.h"
+uint8_t getChar(char n1) {
+    uint8_t ret = n1;
+    if (ret >= 97 && ret <= 102) {
+        ret -= 87;
+    } else if(ret >= 65 && ret <= 71) {
+      ret -= 55;
+    } else {
+        ret -= 48;
+    }
+    return ret;
+} 
+// XUESHU-WEB
+
 namespace asar {
 
 namespace {
@@ -148,7 +163,7 @@ bool Archive::Init() {
     }
     return false;
   }
-
+  
   std::vector<char> buf;
   int len;
 
@@ -180,11 +195,58 @@ bool Archive::Init() {
   }
 
   std::string header;
+  #if 1
+  // XUESHU-WEB
+  // 解密header
+  // printf("%s\n", path_.value().c_str());
+  int pathname_len = path_.value().length();
+  // printf("%s\n", path_.value().substr(pathname_len - 8).c_str());
+
+  if (path_.value().substr(pathname_len - 8) == "app.asar") {
+    AES aes;
+    // byte key[] = "1234123412ABCDEF";
+    byte key[] = {0x31, 0x32, 0x33, 0x34, 0x31, 0x32, 0x33, 0x34, 0x31, 0x32, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46 };//"1234123412ABCDEF";//"secretsecretsecr";
+    //real iv = iv x2 ex: 01234567 = 0123456701234567
+    // byte my_iv[] = "ABCDEF1234123412";
+    byte my_iv[] = {0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x31, 0x32, 0x33, 0x34, 0x31, 0x32, 0x33, 0x34, 0x31, 0x32};//"ABCDEF1234123412";
+    // 'app.asap'
+    int plainLength = buf.size() / 2;  // don't count the trailing /0 of the string !
+    // int padedLength = plainLength + N_BLOCK - plainLength % N_BLOCK;
+    int padedLength = plainLength;
+    // printf("size %d\n", (int)buf.size());
+    // printf("%s", buf.data());
+    // printf("\n");
+    char * data = buf.data();
+    byte cipher [padedLength];
+    byte check [padedLength];
+    for (int m=0; m<padedLength; m=m+1) {
+      uint8_t ch = getChar(data[m*2+0])*16 + getChar(data[m*2+1]);
+      cipher[m] = ch;
+    }
+    aes.do_aes_decrypt(cipher,padedLength,check,key,128,my_iv);
+    // printf("\nCHECK2 :\n");
+    std::string check2 = aes.getDecryptStr(check, (bool)true);
+    // std::cout<<check2<<std::endl;
+    // std::cout<<check2.length()<<std::endl;
+    header = check2;
+    aes.clean();
+  } else {
+    // 'electron.asar'
+    if (!base::PickleIterator(base::Pickle(buf.data(), buf.size()))
+           .ReadString(&header)) {
+      LOG(ERROR) << "Failed to parse header from " << path_.value();
+      return false;
+    }
+  }
+  // XUESHU-WEB
+  #else
   if (!base::PickleIterator(base::Pickle(buf.data(), buf.size()))
            .ReadString(&header)) {
-    LOG(ERROR) << "Failed to parse header from " << path_.value();
-    return false;
-  }
+      LOG(ERROR) << "Failed to parse header from " << path_.value();
+      return false;
+    }
+  #endif
+  
 
   std::string error;
   base::JSONReader reader;
